@@ -1,6 +1,6 @@
-
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { User, Task, Reward, RedeemedReward } from '../types';
+import { useSheetSync } from '../hooks/useSheetSync';
 
 interface GameContextType {
   currentUser: User | null;
@@ -8,6 +8,7 @@ interface GameContextType {
   tasks: Task[];
   rewards: Reward[];
   redeemedRewards: RedeemedReward[];
+  isSync: boolean;
   login: (email: string, password: string) => boolean;
   logout: () => void;
   completeTask: (taskId: string) => void;
@@ -20,6 +21,8 @@ interface GameContextType {
   deleteReward: (rewardId: string) => void;
   addUser: (user: Omit<User, 'id' | 'points'>) => void;
   removeUser: (userId: string) => void;
+  syncToSheets: () => Promise<void>;
+  loadFromSheets: () => Promise<void>;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -89,6 +92,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [rewards, setRewards] = useState<Reward[]>(initialRewards);
   const [redeemedRewards, setRedeemedRewards] = useState<RedeemedReward[]>([]);
 
+  const { isSync, syncToSheets: syncToSheetsHook, loadFromSheets: loadFromSheetsHook } = useSheetSync();
+
   const login = (email: string, password: string): boolean => {
     const user = users.find(u => u.email === email);
     if (user && password === '123456') { // Simple auth for demo
@@ -156,6 +161,27 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return true;
   };
 
+  const syncToSheets = async () => {
+    await syncToSheetsHook(users, tasks, rewards);
+  };
+
+  const loadFromSheets = async () => {
+    const data = await loadFromSheetsHook();
+    if (data) {
+      setUsers(data.users);
+      setTasks(data.tasks);
+      setRewards(data.rewards);
+      
+      // Atualizar usuário atual se ele estiver logado
+      if (currentUser) {
+        const updatedCurrentUser = data.users.find(u => u.id === currentUser.id);
+        if (updatedCurrentUser) {
+          setCurrentUser(updatedCurrentUser);
+        }
+      }
+    }
+  };
+
   const createTask = (task: Omit<Task, 'id' | 'status' | 'completedBy'>) => {
     const newTask: Task = {
       ...task,
@@ -210,6 +236,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       tasks,
       rewards,
       redeemedRewards,
+      isSync,
       login,
       logout,
       completeTask,
@@ -221,7 +248,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       deleteTask,
       deleteReward,
       addUser,
-      removeUser
+      removeUser,
+      syncToSheets,
+      loadFromSheets
     }}>
       {children}
     </GameContext.Provider>
